@@ -6,7 +6,7 @@ from picnnt.evaluate import paired_significance
 from picnnt.utils import get_device
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", default="HUST", choices=["HUST"])
+parser.add_argument("--dataset", default="HUST", choices=["HUST", "MATR", "CALCE", "NASA"])
 parser.add_argument("--processed-dir", default="data/processed/HUST")
 parser.add_argument("--n-seeds", type=int, default=5)
 parser.add_argument("--seq-len", type=int, default=50)
@@ -16,7 +16,13 @@ args = parser.parse_args()
 device = get_device()
 print(f"device={device}  dataset={args.dataset}  n_seeds={args.n_seeds}  stride={args.stride}")
 
-data = build_real_data(args.dataset, args.processed_dir, seq_len=args.seq_len, stride=args.stride)
+if args.dataset == "NASA":
+    from picnnt.experiments import build_data_from_cells
+    from picnnt.data.real_nasa import load_dataset
+    cells = load_dataset(args.processed_dir) # For NASA, we pass raw dir instead of processed
+    data = build_data_from_cells(cells, seq_len=args.seq_len, stride=args.stride)
+else:
+    data = build_real_data(args.dataset, args.processed_dir, seq_len=args.seq_len, stride=args.stride)
 print(f"train/val/test cells: {len(data.train_ds.cell_boundaries)}/"
       f"{len(data.val_ds.cell_boundaries)}/{len(data.test_ds.cell_boundaries)}  "
       f"windows: {len(data.train_ds)}/{len(data.val_ds)}/{len(data.test_ds)}")

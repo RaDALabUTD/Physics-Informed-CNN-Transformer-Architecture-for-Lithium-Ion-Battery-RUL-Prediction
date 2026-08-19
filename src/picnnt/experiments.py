@@ -27,22 +27,28 @@ class DataBundle:
 
 def build_data_from_cells(
     cells: list[CellTrajectory], split_seed: int = 0, seq_len: int = 50, stride: int = 1,
+    smooth_resistance: bool = False,
 ) -> DataBundle:
     splits = split_cells(cells, seed=split_seed)
-    train_feats = np.concatenate([cell_to_features(c) for c in splits.train], axis=0)
+    train_feats = np.concatenate(
+        [cell_to_features(c, smooth_resistance=smooth_resistance) for c in splits.train], axis=0,
+    )
     scaler = Scaler.fit(train_feats)
-    train_ds = WindowDataset(splits.train, scaler, seq_len=seq_len, stride=stride)
-    val_ds = WindowDataset(splits.val, scaler, seq_len=seq_len, stride=stride)
-    test_ds = WindowDataset(splits.test, scaler, seq_len=seq_len, stride=stride)
+    train_ds = WindowDataset(splits.train, scaler, seq_len=seq_len, stride=stride, smooth_resistance=smooth_resistance)
+    val_ds = WindowDataset(splits.val, scaler, seq_len=seq_len, stride=stride, smooth_resistance=smooth_resistance)
+    test_ds = WindowDataset(splits.test, scaler, seq_len=seq_len, stride=stride, smooth_resistance=smooth_resistance)
     return DataBundle(train_ds=train_ds, val_ds=val_ds, test_ds=test_ds, scaler=scaler, cells=cells)
 
 
 def build_real_data(
     name: str, processed_dir: str, split_seed: int = 0, seq_len: int = 50, stride: int = 1,
+    smooth_resistance: bool = False,
 ) -> DataBundle:
     from picnnt.data.real import load_dataset
     cells = load_dataset(name, processed_dir)
-    return build_data_from_cells(cells, split_seed=split_seed, seq_len=seq_len, stride=stride)
+    return build_data_from_cells(
+        cells, split_seed=split_seed, seq_len=seq_len, stride=stride, smooth_resistance=smooth_resistance,
+    )
 
 
 def build_samsung_data(
@@ -57,6 +63,14 @@ def build_nasa_data(
     raw_dir: str, split_seed: int = 0, seq_len: int = 20, stride: int = 1,
 ) -> DataBundle:
     from picnnt.data.real_nasa import load_dataset
+    cells = load_dataset(raw_dir)
+    return build_data_from_cells(cells, split_seed=split_seed, seq_len=seq_len, stride=stride)
+
+
+def build_zhang_data(
+    raw_dir: str, split_seed: int = 0, seq_len: int = 10, stride: int = 1,
+) -> DataBundle:
+    from picnnt.data.real_zhang import load_dataset
     cells = load_dataset(raw_dir)
     return build_data_from_cells(cells, split_seed=split_seed, seq_len=seq_len, stride=stride)
 

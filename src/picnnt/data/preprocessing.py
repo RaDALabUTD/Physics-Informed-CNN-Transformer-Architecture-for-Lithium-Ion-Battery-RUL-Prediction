@@ -41,19 +41,34 @@ class Scaler:
         return Scaler(mean=x.mean(axis=0), std=x.std(axis=0) + 1e-8)
 
 
-def cell_to_resistance_proxy(cell: CellTrajectory) -> np.ndarray:
+def fit_resistance_growth_curve(cycles: np.ndarray, resistance: np.ndarray) -> tuple[float, float]:
+    x = np.sqrt(cycles.astype(np.float64))
+    y = resistance.astype(np.float64)
+    a = np.stack([np.ones_like(x), x], axis=1)
+    (r0, k), *_ = np.linalg.lstsq(a, y, rcond=None)
+    return float(r0), float(k)
+
+
+def smooth_resistance_via_growth_law(cycles: np.ndarray, resistance: np.ndarray) -> np.ndarray:
+    r0, k = fit_resistance_growth_curve(cycles, resistance)
+    return (r0 + k * np.sqrt(cycles.astype(np.float64))).astype(np.float32)
+
+
+def cell_to_resistance_proxy(cell: CellTrajectory, smooth: bool = False) -> np.ndarray:
     if cell.has_real_resistance and not np.all(np.isnan(cell.R_int)):
         r = cell.R_int.astype(np.float32).copy()
         valid = ~np.isnan(r)
         if valid.any():
             r[~valid] = np.mean(r[valid])
-            return np.clip(r, 1e-4, None)
+            r = np.clip(r, 1e-4, None)
+            return smooth_resistance_via_growth_law(cell.cycles, r) if smooth else r
     v_nominal = float(np.max(cell.V)) + 0.05
-    return np.clip((v_nominal - cell.V) / np.clip(cell.I, 1e-3, None), 1e-4, None).astype(np.float32)
+    r = np.clip((v_nominal - cell.V) / np.clip(cell.I, 1e-3, None), 1e-4, None).astype(np.float32)
+    return smooth_resistance_via_growth_law(cell.cycles, r) if smooth else r
 
 
-def cell_to_features(cell: CellTrajectory) -> np.ndarray:
-    r = cell_to_resistance_proxy(cell)
+def cell_to_features(cell: CellTrajectory, smooth_resistance: bool = False) -> np.ndarray:
+    r = cell_to_resistance_proxy(cell, smooth=smooth_resistance)
     return np.stack([cell.V, cell.I, cell.T, cell.Q, r], axis=1).astype(np.float32)
 
 
@@ -84,9 +99,13 @@ def split_cells(cells: list[CellTrajectory], seed: int = 0) -> SplitCells:
 
 
 class WindowDataset(Dataset):
-    def __init__(self, cells: list[CellTrajectory], scaler: Scaler, seq_len: int = SEQ_LEN, stride: int = 1):
+    def __init__(
+        self, cells: list[CellTrajectory], scaler: Scaler, seq_len: int = SEQ_LEN, stride: int = 1,
+        smooth_resistance: bool = False,
+    ):
         self.seq_len = seq_len
         self.stride = stride
+        self.smooth_resistance = smooth_resistance
         self.windows: list[np.ndarray] = []
         self.targets: list[float] = []
         self.resistance: list[float] = []
@@ -98,9 +117,9 @@ class WindowDataset(Dataset):
 
         flat_start = 0
         for cell in cells:
-            feats = scaler.transform(cell_to_features(cell))
+            feats = scaler.transform(cell_to_features(cell, smooth_resistance=self.smooth_resistance))
             rul = cell_to_rul(cell)
-            r_proxy = cell_to_resistance_proxy(cell)
+            r_proxy = cell_to_resistance_proxy(cell, smooth=self.smooth_resistance)
             cap_frac = cell_to_capacity_fraction(cell)
             n = len(cell.cycles)
             if n < seq_len:

@@ -8,18 +8,22 @@ from picnnt.train import TrainConfig
 from picnnt.utils import get_device
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", required=True, choices=["HUST", "SAMSUNG"])
-parser.add_argument("--processed-dir", default="data/processed/HUST")
-parser.add_argument("--raw-dir", default="data/raw/SAMSUNG")
+parser.add_argument("--dataset", required=True, choices=["HUST", "SAMSUNG", "MATR", "CALCE", "NASA"])
+parser.add_argument("--data-dir", default="data/processed/HUST")
 parser.add_argument("--stride", type=int, default=20)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
 device = get_device()
-if args.dataset == "HUST":
-    data = build_real_data("HUST", args.processed_dir, stride=args.stride)
+if args.dataset == "NASA":
+    from picnnt.experiments import build_data_from_cells
+    from picnnt.data.real_nasa import load_dataset
+    cells = load_dataset(args.data_dir)
+    data = build_data_from_cells(cells, stride=args.stride)
+elif args.dataset == "SAMSUNG":
+    data = build_samsung_data(args.data_dir, stride=args.stride)
 else:
-    data = build_samsung_data(args.raw_dir, stride=args.stride)
+    data = build_real_data(args.dataset, args.data_dir, stride=args.stride)
 
 mono_grid = [0.0, 0.1, 0.3]
 bv_grid = [0.0, 0.05, 0.15]

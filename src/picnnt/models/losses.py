@@ -64,10 +64,13 @@ def butler_volmer_loss(
     resistance_proxy: torch.Tensor,
     constants: PhysicsConstants,
     capacity_rul_curve: CapacityRULCurve,
+    symmetric: bool = False,
 ) -> torch.Tensor:
     rul_hat = torch.relu(y_hat)
     q_hat = capacity_rul_curve(rul_hat)
     q_bv_max = torch.exp(-(resistance_proxy - constants.r0) / constants.r_ref).clamp(max=1.0)
+    if symmetric:
+        return torch.mean((q_hat - q_bv_max) ** 2)
     return torch.mean(torch.relu(q_hat - q_bv_max) ** 2)
 
 
@@ -77,6 +80,7 @@ class LossWeights:
     lambda_bv: float = 0.05
     adaptive_scale: bool = False
     max_scale_ratio: float = 20.0
+    symmetric_bv: bool = False
 
 
 def _adaptive_lambda(target_frac: float, l_data: torch.Tensor, l_term: torch.Tensor, max_ratio: float) -> torch.Tensor:
@@ -96,16 +100,21 @@ def total_loss(
     segment_len: int,
     capacity_rul_curve: CapacityRULCurve,
     mono_margin: float = 1.0,
+    ema_lambda_override: tuple[float, float] | None = None,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     l_data = torch.mean((y_hat - y_true) ** 2)
     l_mono = monotonicity_loss(y_hat, segment_len, mono_margin) if weights.lambda_mono > 0 else y_hat.new_zeros(())
     l_bv = (
-        butler_volmer_loss(y_hat, resistance_proxy, constants, capacity_rul_curve)
+        butler_volmer_loss(y_hat, resistance_proxy, constants, capacity_rul_curve, symmetric=weights.symmetric_bv)
         if weights.lambda_bv > 0 else y_hat.new_zeros(())
     )
+    instantaneous_lambda_mono = _adaptive_lambda(weights.lambda_mono, l_data, l_mono, weights.max_scale_ratio)
+    instantaneous_lambda_bv = _adaptive_lambda(weights.lambda_bv, l_data, l_bv, weights.max_scale_ratio)
     if weights.adaptive_scale:
-        eff_lambda_mono = _adaptive_lambda(weights.lambda_mono, l_data, l_mono, weights.max_scale_ratio)
-        eff_lambda_bv = _adaptive_lambda(weights.lambda_bv, l_data, l_bv, weights.max_scale_ratio)
+        if ema_lambda_override is not None:
+            eff_lambda_mono, eff_lambda_bv = ema_lambda_override
+        else:
+            eff_lambda_mono, eff_lambda_bv = instantaneous_lambda_mono, instantaneous_lambda_bv
     else:
         eff_lambda_mono = weights.lambda_mono
         eff_lambda_bv = weights.lambda_bv
@@ -114,4 +123,6 @@ def total_loss(
         "data": l_data.item(), "mono": l_mono.item(), "bv": l_bv.item(), "total": total.item(),
         "eff_lambda_mono": float(eff_lambda_mono) if torch.is_tensor(eff_lambda_mono) else eff_lambda_mono,
         "eff_lambda_bv": float(eff_lambda_bv) if torch.is_tensor(eff_lambda_bv) else eff_lambda_bv,
+        "instantaneous_lambda_mono": float(instantaneous_lambda_mono),
+        "instantaneous_lambda_bv": float(instantaneous_lambda_bv),
     }

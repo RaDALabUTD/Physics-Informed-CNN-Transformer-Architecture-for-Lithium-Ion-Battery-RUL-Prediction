@@ -96,7 +96,11 @@ def load_battery_data_pkl(path: Path) -> CellTrajectory | None:
 
     return CellTrajectory(
         cell_id=cell_id,
-        dataset="MATR" if cell_id.upper().startswith("MATR") or cell_id.lower().startswith("b") else "HUST",
+        dataset=(
+            "MATR" if cell_id.upper().startswith("MATR") or cell_id.lower().startswith("b")
+            else "RWTH" if cell_id.upper().startswith("RWTH")
+            else "HUST"
+        ),
         c_rate=float("nan"),
         temperature_c=float("nan"),
         chemistry=str(bd.get("cathode_material") or "unknown"),

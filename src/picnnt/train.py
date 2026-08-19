@@ -85,6 +85,10 @@ def train_model(
     epochs_without_improvement = 0
     history = {"train_loss": [], "val_rmse": []}
 
+    ema_decay = 0.98
+    ema_lambda_mono = config.loss_weights.lambda_mono
+    ema_lambda_bv = config.loss_weights.lambda_bv
+
     for epoch in range(config.max_epochs):
         model.train()
         epoch_losses = []
@@ -93,10 +97,14 @@ def train_model(
             optimizer.zero_grad()
             y_hat = model(x)
             if config.use_physics:
-                loss, _ = total_loss(
+                loss, comps = total_loss(
                     y_hat, y, r, physics_constants, config.loss_weights, segment_len,
                     capacity_rul_curve, config.mono_margin,
+                    ema_lambda_override=(ema_lambda_mono, ema_lambda_bv) if config.loss_weights.adaptive_scale else None,
                 )
+                if config.loss_weights.adaptive_scale:
+                    ema_lambda_mono = ema_decay * ema_lambda_mono + (1 - ema_decay) * comps["instantaneous_lambda_mono"]
+                    ema_lambda_bv = ema_decay * ema_lambda_bv + (1 - ema_decay) * comps["instantaneous_lambda_bv"]
             else:
                 loss = torch.mean((y_hat - y) ** 2)
             loss.backward()

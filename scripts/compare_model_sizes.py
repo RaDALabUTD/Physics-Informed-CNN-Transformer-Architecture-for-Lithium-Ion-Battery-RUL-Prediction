@@ -1,11 +1,13 @@
 import argparse
 import time
 
-from picnnt.experiments import MODEL_REGISTRY, build_nasa_data, build_real_data, build_samsung_data, run_seeds, summarize
+from picnnt.experiments import (
+    MODEL_REGISTRY, build_nasa_data, build_real_data, build_samsung_data, build_zhang_data, run_seeds, summarize,
+)
 from picnnt.utils import get_device
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", required=True, choices=["HUST", "MATR", "SAMSUNG", "NASA"])
+parser.add_argument("--dataset", required=True, choices=["HUST", "MATR", "SAMSUNG", "NASA", "ZHANG", "RWTH"])
 parser.add_argument("--processed-dir", default=None)
 parser.add_argument("--raw-dir", default=None)
 parser.add_argument("--n-seeds", type=int, default=2)
@@ -20,6 +22,8 @@ elif args.dataset == "NASA":
     data = build_nasa_data(
         args.raw_dir or "data/raw/NASA/5. Battery Data Set", stride=args.stride, seq_len=args.seq_len,
     )
+elif args.dataset == "ZHANG":
+    data = build_zhang_data(args.raw_dir or "data/raw/ZHANG_EIS/extracted", stride=args.stride, seq_len=args.seq_len)
 else:
     processed_dir = args.processed_dir or f"data/processed/{args.dataset}"
     data = build_real_data(args.dataset, processed_dir, stride=args.stride, seq_len=args.seq_len)
