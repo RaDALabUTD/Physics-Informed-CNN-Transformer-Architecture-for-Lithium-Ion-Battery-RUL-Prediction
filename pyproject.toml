@@ -1,0 +1,23 @@
+[project]
+name = "picnnt"
+version = "0.1.0"
+description = "Battery RUL prediction"
+requires-python = ">=3.11"
+dependencies = [
+    "torch",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "matplotlib",
+    "pyyaml",
+    "tqdm",
+    "requests",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
